@@ -24,7 +24,5 @@ def main():
         # simular_escrita(alunos, configuracao)
     else:
         print("\nEncerrando o programa. Falha na Geração de Dados ou na Configuração.")
-
-# Garante que a função main() seja executada apenas quando este arquivo for rodado
 if __name__ == "__main__":
     main()
