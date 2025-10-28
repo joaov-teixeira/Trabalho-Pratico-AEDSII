@@ -15,7 +15,7 @@ def gerar_lista_alunos():
             return []
             
         print(f"\nGerando {num_registros} registros de alunos...")
-        # Criar um conjunto de registros de alunos com valores fictícios [cite: 57]
+        # Criar um conjunto de registros de alunos com valores fictícios 
         lista_alunos = [Aluno() for _ in range(num_registros)]
         print("Registros gerados com sucesso.")
         

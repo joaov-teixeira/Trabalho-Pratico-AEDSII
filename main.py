@@ -1,6 +1,7 @@
 # Importa as funções dos outros arquivos
 from Dados import gerar_lista_alunos
 from Parametros import obter_parametros_armazenamento
+from Serializacao import simular_escrita
 
 # --- Execução Principal ---
 def main():
@@ -19,9 +20,8 @@ def main():
     
     if alunos and configuracao:
         print("\nPróximo passo: Simulação de Escrita.")
-        # O Passo 3: Simulação de escrita viria aqui.
-        # Nós chamaremos uma nova função, por exemplo:
-        # simular_escrita(alunos, configuracao)
+        simular_escrita(alunos, configuracao)
+        print("\nPróximo passo: Cálculo de Estatísticas.")
     else:
         print("\nEncerrando o programa. Falha na Geração de Dados ou na Configuração.")
 if __name__ == "__main__":
