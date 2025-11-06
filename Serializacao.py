@@ -1,5 +1,10 @@
 import struct
+import os       
+import shutil
 from Aluno import Aluno
+
+
+PASTA_BLOCOS = "blocos_dat"
 
 # Caractere de preenchimento (padding) usado em todo o módulo
 PADDING_CHAR = b'#' 
@@ -19,7 +24,9 @@ TAMANHO_PREFIXO_FORMAT = 'H'
 TAMANHO_PREFIXO_BYTES = struct.calcsize(TAMANHO_PREFIXO_FORMAT)
 # Delimitador interno para os campos de string
 DELIMITADOR_CAMPO = b'\x00' # Byte Nulo
-
+# Flag de Continuidade (Most Significant Bit para 2 bytes)
+# 0x8000 = 1000000000000000 em binário
+FLAG_CONTINUACAO = 0x8000
 
 # --- PASSO 3.1: SERIALIZAÇÃO ---
 
@@ -92,6 +99,38 @@ def serializar_aluno_variavel(aluno):
     
     return registro_payload
 
+def preparar_diretorio_blocos(configuracao):
+    """
+    Limpa e (re)cria o diretório de blocos, se o usuário solicitou.
+    """
+    if configuracao["gerar_blocos_individuais"]:
+        try:
+            if os.path.exists(PASTA_BLOCOS):
+                shutil.rmtree(PASTA_BLOCOS) # Limpa o diretório antigo
+            os.makedirs(PASTA_BLOCOS)
+            print(f"Diretório '{PASTA_BLOCOS}' preparado para blocos individuais.")
+        except OSError as e:
+            print(f"Erro ao preparar o diretório '{PASTA_BLOCOS}': {e}")
+            # Desliga a flag se não conseguir criar a pasta
+            configuracao["gerar_blocos_individuais"] = False
+
+# --- NOVA FUNÇÃO AUXILIAR INTERNA ---
+def _escrever_bloco(file_principal, bloco_bytes, configuracao, num_bloco):
+    """
+    Escreve o bloco no arquivo principal e, opcionalmente, 
+    em um arquivo individual.
+    """
+    # 1. Escreve no arquivo principal (sempre) 
+    file_principal.write(bloco_bytes)
+    
+    # 2. Escreve em arquivo individual (opcional)
+    if configuracao["gerar_blocos_individuais"]:
+        nome_bloco = f"{PASTA_BLOCOS}/bloco_{num_bloco}.dat"
+        try:
+            with open(nome_bloco, "wb") as f_bloco:
+                f_bloco.write(bloco_bytes)
+        except IOError as e:
+            print(f"Erro ao escrever bloco individual '{nome_bloco}': {e}")
 
 
 
@@ -125,7 +164,7 @@ def _processar_modo_fixo(alunos, configuracao):
     lista_blocos_info = [] # Lista para guardar os bytes úteis de cada bloco
     bloco_atual_bytes = bytearray()
     registros_no_bloco_atual = 0
-
+    num_bloco_atual = 1
     # Abre o arquivo .DAT para escrita binária ('wb') 
     try:
         with open("alunos.dat", "wb") as file:
@@ -141,8 +180,10 @@ def _processar_modo_fixo(alunos, configuracao):
                     bloco_atual_bytes.extend(PADDING_CHAR * padding_size)
                     
                     # 3. Grava o bloco cheio no arquivo
-                    file.write(bloco_atual_bytes)
-                    
+                    #file.write(bloco_atual_bytes)
+                    _escrever_bloco(file, bloco_atual_bytes, configuracao, num_bloco_atual)
+                    num_bloco_atual += 1 
+
                     # 4. Inicia um novo bloco
                     bloco_atual_bytes = bytearray()
                     registros_no_bloco_atual = 0
@@ -159,12 +200,14 @@ def _processar_modo_fixo(alunos, configuracao):
                 # Preenche e grava o último bloco
                 padding_size = tamanho_bloco - bytes_usados
                 bloco_atual_bytes.extend(PADDING_CHAR * padding_size)
-                file.write(bloco_atual_bytes)
+                #file.write(bloco_atual_bytes)
+                _escrever_bloco(file, bloco_atual_bytes, configuracao, num_bloco_atual)
+                # num_bloco_atual += 1 # (Opcional, se quiser contar)
 
         print(f"\nArquivo 'alunos.dat' gerado com sucesso!")
         # Retorna a lista E o tamanho do registro
         return {"lista_blocos": lista_blocos_info, "tamanho_registro": tamanho_registro}
-
+        
     except IOError as e:
         print(f"Erro ao escrever o arquivo 'alunos.dat': {e}")
         return None
@@ -178,6 +221,7 @@ def _processar_modo_variavel_contiguo(alunos, configuracao):
     tamanho_bloco = configuracao["tamanho_bloco"]
     lista_blocos_info = [] # Guarda os bytes úteis de cada bloco
     bloco_atual_bytes = bytearray()
+    num_bloco_atual = 1 # <-- NOVO: Contador de blocos
 
     try:
         with open("alunos.dat", "wb") as file:
@@ -212,8 +256,10 @@ def _processar_modo_variavel_contiguo(alunos, configuracao):
                     bloco_atual_bytes.extend(PADDING_CHAR * padding_size)
                     
                     # 5c. Gravar o bloco antigo
-                    file.write(bloco_atual_bytes)
-                    
+                    #file.write(bloco_atual_bytes)
+                    _escrever_bloco(file, bloco_atual_bytes, configuracao, num_bloco_atual)
+                    num_bloco_atual += 1
+
                     # 5d. Iniciar novo bloco JÁ COM o registro atual
                     bloco_atual_bytes = bytearray()
                     bloco_atual_bytes.extend(bytes_prefixo_tamanho + registro_payload)
@@ -229,7 +275,8 @@ def _processar_modo_variavel_contiguo(alunos, configuracao):
                 # Preenche e grava o último bloco
                 padding_size = tamanho_bloco - bytes_usados
                 bloco_atual_bytes.extend(PADDING_CHAR * padding_size)
-                file.write(bloco_atual_bytes)
+                #file.write(bloco_atual_bytes)
+                _escrever_bloco(file, bloco_atual_bytes, configuracao, num_bloco_atual)
 
         print(f"\nArquivo 'alunos.dat' gerado com sucesso!")
         # Retorna dados para estatísticas (sem tamanho fixo)
@@ -237,6 +284,117 @@ def _processar_modo_variavel_contiguo(alunos, configuracao):
 
     except IOError as e:
         print(f"Erro ao escrever o arquivo 'alunos.dat': {e}")
+        return None
+    
+def _processar_modo_variavel_espalhado(alunos, configuracao):
+    """
+    Processa e grava os alunos no modo variável COM espalhamento (fragmentação).
+    """
+    tamanho_bloco = configuracao["tamanho_bloco"]
+    lista_blocos_info = [] # Guarda os bytes úteis de cada bloco
+    bloco_atual_bytes = bytearray()
+    num_bloco_atual = 1 # <-- NOVO: Contador de blocos
+
+    indice_aluno = 0
+    registro_payload_atual = None
+    bytes_escritos_do_payload = 0
+
+    try:
+        with open("alunos.dat", "wb") as file:
+            
+            # Loop 'while' pois um aluno pode precisar de várias iterações (blocos)
+            while indice_aluno < len(alunos):
+                
+                # 1. Obter o payload do aluno (se for um novo)
+                if registro_payload_atual is None:
+                    aluno = alunos[indice_aluno]
+                    registro_payload_atual = serializar_aluno_variavel(aluno)
+                    bytes_escritos_do_payload = 0
+                    
+                    if (TAMANHO_PREFIXO_BYTES + 1) > tamanho_bloco:
+                         print(f"ERRO: Tamanho do bloco ({tamanho_bloco}b) é muito pequeno. "
+                               f"Não cabe nem o prefixo ({TAMANHO_PREFIXO_BYTES}b) + 1 byte de dado. Abortando.")
+                         return None # Erro fatal
+
+                # 2. Calcular o que falta escrever do registro atual
+                payload_total = len(registro_payload_atual)
+                payload_restante = payload_total - bytes_escritos_do_payload
+                
+                # 3. Calcular espaço disponível no bloco
+                espaco_disponivel_no_bloco = tamanho_bloco - len(bloco_atual_bytes)
+
+                # 4. Verificar se o bloco está "funcionalmente cheio"
+                # (Não cabe nem um prefixo + 1 byte de dado)
+                if espaco_disponivel_no_bloco < (TAMANHO_PREFIXO_BYTES + 1):
+                    # Bloco cheio. Finalizar, gravar e começar um novo.
+                    bytes_usados = len(bloco_atual_bytes)
+                    lista_blocos_info.append(bytes_usados)
+                    
+                    padding_size = tamanho_bloco - bytes_usados
+                    bloco_atual_bytes.extend(PADDING_CHAR * padding_size)
+                    
+                    #file.write(bloco_atual_bytes)
+                    _escrever_bloco(file, bloco_atual_bytes, configuracao, num_bloco_atual)
+                    num_bloco_atual += 1
+                    bloco_atual_bytes = bytearray()
+                    
+                    # Continua o loop com O MESMO registro, mas em um novo bloco
+                    continue 
+
+                # 5. Calcular quanto payload podemos escrever neste bloco
+                espaco_para_payload_neste_bloco = espaco_disponivel_no_bloco - TAMANHO_PREFIXO_BYTES
+
+                if payload_restante <= espaco_para_payload_neste_bloco:
+                    # --- 5a. O restante do registro CABE ---
+                    
+                    tamanho_chunk = payload_restante
+                    prefixo_valor = tamanho_chunk # MSB = 0 (sem flag)
+                    
+                    # Obter os dados (do ponto onde paramos até o fim)
+                    chunk_data = registro_payload_atual[bytes_escritos_do_payload : ]
+                    
+                    # Avançar para o PRÓXIMO aluno
+                    indice_aluno += 1
+                    registro_payload_atual = None # Limpa para carregar o próximo
+                    
+                else:
+                    # --- 5b. O restante NÃO CABE (VAMOS ESPALHAR) ---
+                    
+                    tamanho_chunk = espaco_para_payload_neste_bloco
+                    prefixo_valor = tamanho_chunk | FLAG_CONTINUACAO # MSB = 1 (com flag)
+                    
+                    # Obter os dados (apenas o pedaço que cabe)
+                    inicio_chunk = bytes_escritos_do_payload
+                    fim_chunk = bytes_escritos_do_payload + tamanho_chunk
+                    chunk_data = registro_payload_atual[inicio_chunk : fim_chunk]
+                    
+                    # Atualizar o offset para O MESMO aluno
+                    bytes_escritos_do_payload += tamanho_chunk
+                    # Não avançamos o indice_aluno
+                
+                # 6. Escrever o prefixo e o chunk no bloco
+                bytes_prefixo = struct.pack(TAMANHO_PREFIXO_FORMAT, prefixo_valor)
+                bloco_atual_bytes.extend(bytes_prefixo + chunk_data)
+                
+            # --- Fim do While ---
+            
+            # 7. Gravar o último bloco
+            if len(bloco_atual_bytes) > 0:
+                bytes_usados = len(bloco_atual_bytes)
+                lista_blocos_info.append(bytes_usados)
+                
+                padding_size = tamanho_bloco - bytes_usados
+                bloco_atual_bytes.extend(PADDING_CHAR * padding_size)
+                #file.write(bloco_atual_bytes)
+                _escrever_bloco(file, bloco_atual_bytes, configuracao, num_bloco_atual)
+        print(f"\nArquivo 'alunos.dat' gerado com sucesso!")
+        return {"lista_blocos": lista_blocos_info, "tamanho_registro": None} 
+
+    except IOError as e:
+        print(f"Erro ao escrever o arquivo 'alunos.dat': {e}")
+        return None
+    except Exception as e:
+        print(f"Erro inesperado no processamento com espalhamento: {e}")
         return None
 
 def simular_escrita(alunos, configuracao):
@@ -263,9 +421,8 @@ def simular_escrita(alunos, configuracao):
             dados_estatisticas = _processar_modo_variavel_contiguo(alunos, configuracao)
         
         elif sub_modo == "ESPALHADO":
-            print("Sub-modo: Espalhado (fragmentado) - (Não implementado)")
-            # (Implementação futura)
-            # dados_estatisticas = _processar_modo_variavel_espalhado(alunos, configuracao)
+            print("Sub-modo: Espalhado (fragmentado)")
+            dados_estatisticas = _processar_modo_variavel_espalhado(alunos, configuracao)
             pass
         pass
 

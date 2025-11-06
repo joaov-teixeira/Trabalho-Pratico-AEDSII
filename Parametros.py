@@ -59,11 +59,19 @@ def obter_parametros_armazenamento():
         "modo_espalhamento": modo_espalhamento
     }
     
+    # 4. Obter Geração de Blocos Individuais
+    print("\n4. Deseja gerar arquivos .DAT individuais para cada bloco?")
+    # print("   (Isso é ADICIONAL ao 'alunos.dat' e serve para visualização)")
+    gerar_blocos = input("   Escolha (s/n): ").lower()
+    config["gerar_blocos_individuais"] = (gerar_blocos == 's')
+
     print("\n--- Configuração Definida ---")
     print(f"Tamanho do Bloco: {config['tamanho_bloco']} bytes")
     print(f"Modo: {config['modo_armazenamento']}")
     if config['modo_espalhamento']:
         print(f"Sub-modo: {config['modo_espalhamento']}")
+    print(f"Gerar blocos individuais: {'Sim' if config['gerar_blocos_individuais'] else 'Não'}")
+    print("-----------------------------")
     print("-----------------------------")
     
     return config

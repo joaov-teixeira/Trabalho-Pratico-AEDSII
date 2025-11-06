@@ -1,7 +1,7 @@
 # Importa as funções dos outros arquivos
 from Dados import gerar_lista_alunos
 from Parametros import obter_parametros_armazenamento
-from Serializacao import simular_escrita
+from Serializacao import simular_escrita, preparar_diretorio_blocos
 from Estatisticas import calcular_e_exibir_estatisticas
 
 # --- Execução Principal ---
@@ -20,6 +20,8 @@ def main():
         configuracao = obter_parametros_armazenamento()
     
     if alunos and configuracao:
+        # Prepara o diretório de blocos ANTES da simulação
+        preparar_diretorio_blocos(configuracao)
         print("\nPróximo passo: Simulação de Escrita.")
         simular_escrita(alunos, configuracao)
         print("\nPróximo passo: Cálculo de Estatísticas.")
